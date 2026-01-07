@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Healthcheck</title>
+  <link rel="icon" href="favicon.ico" />
+  <link rel="stylesheet" href="style.css?v=20260101" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div>
+        <div class="brandTitle">Healthcheck</div>
+        <div class="brandSub"><a class="link" href="index.html">Back to dashboard</a></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="card">
+    <h2>Resource checks</h2>
+    <div class="muted">This page verifies that JSON + critical assets are reachable from GitHub Pages.</div>
+    <div class="divider"></div>
+    <div id="out" class="muted">Running…</div>
+  </main>
+
+<script>
+(() => {
+  'use strict';
+  const BASE = new URL('.', location.href);
+  const url = (p)=>new URL(p, BASE).toString();
+  const out = document.getElementById('out');
+  const esc = (s)=>{const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML;};
+
+  async function head(p) {
+    const u = url(p);
+    try {
+      const r = await fetch(u, {method:'HEAD', cache:'no-store'});
+      return { ok:r.ok, status:r.status, url:u };
+    } catch (e) {
+      return { ok:false, status:0, url:u, err:String(e) };
+    }
+  }
+
+  async function getJson(p) {
+    const u = url(p);
+    const r = await fetch(u, {cache:'no-store'});
+    return { ok:r.ok, status:r.status, url:u, json: r.ok ? await r.json() : null };
+  }
+
+  async function run() {
+    const lines = [];
+    const reg = await getJson('data/campaigns.json');
+    lines.push(`<div><b>data/campaigns.json</b>: ${reg.ok ? 'OK' : 'FAIL'} (${reg.status})</div>`);
+    if (!reg.ok || !reg.json || !Array.isArray(reg.json.campaigns)) {
+      out.innerHTML = lines.join('');
+      return;
+    }
+    const c = reg.json.campaigns[0];
+    const sessionsUrl = c.sessionsUrl || ('data/' + c.id + '/sessions.json');
+    const sheetsIndexUrl = c.sheetsIndexUrl || ('data/' + c.id + '/sheets_index.json');
+
+    const s1 = await getJson(sessionsUrl);
+    lines.push(`<div><b>${esc(sessionsUrl)}</b>: ${s1.ok ? 'OK' : 'FAIL'} (${s1.status})</div>`);
+    const s2 = await getJson(sheetsIndexUrl);
+    lines.push(`<div><b>${esc(sheetsIndexUrl)}</b>: ${s2.ok ? 'OK' : 'FAIL'} (${s2.status})</div>`);
+
+    // Sample one media file (if listed)
+    const session = s1.json?.sessions?.[0];
+    const img = session?.media?.images?.[0];
+    if (img) {
+      const p = img.startsWith('gallery/') ? ('assets/' + img) : img;
+      const a = await head(p);
+      lines.push(`<div><b>${esc(p)}</b>: ${a.ok ? 'OK' : 'FAIL'} (${a.status})</div>`);
+    } else {
+      lines.push(`<div class="smallMuted">No sample media paths found in first session.</div>`);
+    }
+
+    out.innerHTML = lines.join('');
+  }
+
+  run();
+})();
+</script>
+</body>
+</html>
